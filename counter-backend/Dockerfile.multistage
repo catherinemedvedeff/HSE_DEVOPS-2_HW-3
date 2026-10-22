@@ -1,0 +1,37 @@
+FROM python:3.11.6-slim-bookworm AS builder
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir poetry==1.8.5 setuptools wheel
+
+COPY pyproject.toml poetry.lock README.md ./
+COPY src/ ./src/
+
+RUN mkdir -p dist/vendor \
+    && poetry export \
+        --without-hashes \
+        --format requirements.txt \
+        --output dist/requirements.txt \
+    && pip wheel \
+        --no-cache-dir \
+        --wheel-dir dist/vendor \
+        -r dist/requirements.txt \
+    && poetry build --format wheel
+
+FROM python:3.11.6-slim-bookworm AS runtime
+
+WORKDIR /app
+
+COPY --from=builder /app/dist /app/dist
+
+RUN pip install \
+    --no-index \
+    --no-cache-dir \
+    --find-links=/app/dist \
+    --find-links=/app/dist/vendor \
+    counter-backend==0.1.0 \
+    && rm -rf /app/dist
+
+EXPOSE 8080
+
+CMD ["python", "-m", "counter_backend"]
